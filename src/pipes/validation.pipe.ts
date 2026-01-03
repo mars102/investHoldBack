@@ -14,7 +14,11 @@ export class ValidationPipe implements PipeTransform<any> {
         const errors = await validate(object);
 
         if (errors.length > 0) {
-            throw new BadRequestException('Validation failed');
+            const errorMessages = this.extractErrorMessages(errors);
+            throw new BadRequestException({
+                message: 'Validation failed',
+                errors: errorMessages
+            });
         }
 
         return value;
@@ -23,5 +27,20 @@ export class ValidationPipe implements PipeTransform<any> {
     private toValidate(metatype: Function): boolean {
         const types: Function[] = [String, Boolean, Number, Array, Object];
         return !types.includes(metatype);
+    }
+
+    private extractErrorMessages(errors: any[]): string[] {
+        const messages: string[] = [];
+        errors.forEach(error => {
+            if (error.constraints) {
+                Object.values(error.constraints).forEach((constraint: string) => {
+                    messages.push(`${error.property}: ${constraint}`);
+                });
+            }
+            if (error.children && error.children.length > 0) {
+                messages.push(...this.extractErrorMessages(error.children));
+            }
+        });
+        return messages;
     }
 }
