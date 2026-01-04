@@ -33,3 +33,5 @@ POSTGRES_HOST=postgres
 PGADMIN_EMAIL=admin@example.com
 PGADMIN_PASSWORD=admin
 PGADMIN_PORT=5050
+
+http://localhost:5050/ откроетя pgAdmin
