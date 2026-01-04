@@ -38,6 +38,8 @@ export class DatabaseInitService implements OnModuleInit {
         console.log('🔄 Начинаем создание администратора...');
 
         try {
+            console.log('🔍 Проверяем существование пользователя...');
+
             // Проверяем существование пользователя
             const [existingUser] = await this.sequelize.query(
                 `SELECT id FROM users WHERE email = :email OR username = :username`,
@@ -46,72 +48,150 @@ export class DatabaseInitService implements OnModuleInit {
                 }
             );
 
+            console.log(`🔍 Результат проверки: ${JSON.stringify(existingUser)}`);
+            console.log(`🔍 Найдено пользователей: ${(existingUser as any[]).length}`);
+
             if ((existingUser as any[]).length > 0) {
                 const existingUserId = (existingUser as any[])[0].id;
-                console.log(`ℹ️ Пользователь уже существует: ${adminEmail} (ID: ${existingUserId})`);
+                console.log(`✅ Администратор уже существует: ${adminEmail} (ID: ${existingUserId})`);
 
-                // Проверяем, назначена ли уже роль ADMIN
-                const [existingRole] = await this.sequelize.query(
-                    `SELECT ur."userId" FROM user_roles ur 
-                 JOIN roles r ON ur."roleId" = r.id 
-                 WHERE ur."userId" = :userId AND r.value = 'ADMIN'`,
-                    {
-                        replacements: { userId: existingUserId },
-                    }
-                );
-
-                console.log(`🔍 Результат проверки роли ADMIN: ${JSON.stringify(existingRole)}`);
-
-                if ((existingRole as any[]).length === 0) {
-                    console.log('ℹ️ У пользователя нет роли ADMIN, назначаем...');
-
-                    // Получаем ID роли ADMIN
-                    const [adminRole] = await this.sequelize.query(
-                        `SELECT id FROM roles WHERE value = 'ADMIN'`
-                    );
-
-                    console.log(`🔍 Результат поиска роли ADMIN: ${JSON.stringify(adminRole)}`);
-
-                    const adminRoleId = (adminRole as any[])[0]?.id;
-
-                    if (adminRoleId) {
-                        // Проверяем, не существует ли уже такая связь
-                        const [existingRelation] = await this.sequelize.query(
-                            `SELECT id FROM user_roles WHERE "userId" = :userId AND "roleId" = :roleId`,
-                            {
-                                replacements: { userId: existingUserId, roleId: adminRoleId },
-                            }
-                        );
-
-                        if ((existingRelation as any[]).length === 0) {
-                            await this.sequelize.query(
-                                `INSERT INTO user_roles ("userId", "roleId")
-                             VALUES (:userId, :roleId)`,
-                                {
-                                    replacements: { userId: existingUserId, roleId: adminRoleId },
-                                }
-                            );
-                            console.log(`✅ Роль ADMIN назначена существующему пользователю: ${adminEmail}`);
-                        } else {
-                            console.log('ℹ️ Связь пользователь-роль уже существует');
-                        }
-                    } else {
-                        console.error('❌ Роль ADMIN не найдена в таблице roles');
-                    }
-                } else {
-                    console.log(`✅ У пользователя уже есть роль ADMIN`);
-                }
+                // Проверяем и назначаем роль если нужно
+                await this.assignAdminRoleIfNeeded(existingUserId);
                 return;
             }
 
-            // ... остальной код создания нового пользователя ...
+            console.log('🆕 Пользователь не найден, создаём нового...');
+
+            // Хешируем пароль
+            const hashedPassword = await bcrypt.hash(adminPassword, 10);
+            console.log('🔑 Пароль захэширован');
+
+            // Создаём пользователя
+            const [result] = await this.sequelize.query(
+                `INSERT INTO users (
+                email, 
+                username, 
+                password, 
+                "emailVerified",
+                "createdAt", 
+                "updatedAt"
+            ) VALUES (
+                :email, 
+                :username, 
+                :password, 
+                true,
+                NOW(), 
+                NOW()
+            ) RETURNING id`,
+                {
+                    replacements: {
+                        email: adminEmail,
+                        username: adminUsername,
+                        password: hashedPassword,
+                    },
+                }
+            );
+
+            console.log(`🔍 Результат INSERT: ${JSON.stringify(result)}`);
+
+            const userId = (result as any[])[0]?.id;
+
+            if (!userId) {
+                throw new Error('Не удалось создать пользователя - нет ID в результате');
+            }
+
+            console.log(`✅ Пользователь создан с ID: ${userId}`);
+
+            // Назначаем роль ADMIN
+            await this.assignAdminRoleToUser(userId);
+
+            console.log(`✅ Создан администратор: ${adminEmail}`);
+            console.log(`🔑 Логин: ${adminEmail} (или username: ${adminUsername})`);
+            console.log(`🔐 Пароль: ${adminPassword}`);
+
         } catch (error: any) {
-            console.error('❌ Ошибка при создании администратора:', error.message);
+            console.error('❌ ОШИБКА в initializeAdminUser():', error.message);
+            console.error('❌ Стек вызовов:', error.stack);
             if (error.sql) {
                 console.error('❌ SQL запрос:', error.sql);
                 console.error('❌ Параметры:', error.parameters);
             }
-            console.warn('⚠️ Приложение запущено без администратора');
+            throw error; // Пробрасываем ошибку дальше
+        }
+    }
+
+    private async assignAdminRoleIfNeeded(userId: number) {
+        try {
+            console.log(`🔍 Проверяем роль ADMIN для пользователя ${userId}...`);
+
+            const [adminRole] = await this.sequelize.query(
+                `SELECT id FROM roles WHERE value = 'ADMIN'`
+            );
+
+            console.log(`🔍 Роль ADMIN: ${JSON.stringify(adminRole)}`);
+
+            const adminRoleId = (adminRole as any[])[0]?.id;
+
+            if (!adminRoleId) {
+                console.error('❌ Роль ADMIN не найдена');
+                return;
+            }
+
+            console.log(`✅ Роль ADMIN найдена с ID: ${adminRoleId}`);
+
+            // Проверяем существование связи
+            const [existingRelation] = await this.sequelize.query(
+                `SELECT id FROM user_roles WHERE "userId" = :userId AND "roleId" = :roleId`,
+                {
+                    replacements: { userId, roleId: adminRoleId },
+                }
+            );
+
+            if ((existingRelation as any[]).length === 0) {
+                console.log('➕ Назначаем роль ADMIN...');
+                await this.sequelize.query(
+                    `INSERT INTO user_roles ("userId", "roleId")
+                 VALUES (:userId, :roleId)`,
+                    {
+                        replacements: { userId, roleId: adminRoleId },
+                    }
+                );
+                console.log('✅ Роль ADMIN назначена');
+            } else {
+                console.log('✅ Роль ADMIN уже назначена');
+            }
+        } catch (error: any) {
+            console.error('❌ Ошибка в assignAdminRoleIfNeeded:', error.message);
+            throw error;
+        }
+    }
+
+    private async assignAdminRoleToUser(userId: number) {
+        try {
+            console.log(`🔍 Назначаем роль ADMIN новому пользователю ${userId}...`);
+
+            const [adminRole] = await this.sequelize.query(
+                `SELECT id FROM roles WHERE value = 'ADMIN'`
+            );
+
+            const adminRoleId = (adminRole as any[])[0]?.id;
+
+            if (!adminRoleId) {
+                throw new Error('Роль ADMIN не найдена');
+            }
+
+            await this.sequelize.query(
+                `INSERT INTO user_roles ("userId", "roleId")
+             VALUES (:userId, :roleId)`,
+                {
+                    replacements: { userId, roleId: adminRoleId },
+                }
+            );
+
+            console.log('✅ Роль ADMIN назначена новому пользователю');
+        } catch (error: any) {
+            console.error('❌ Ошибка в assignAdminRoleToUser:', error.message);
+            throw error;
         }
     }
 }
