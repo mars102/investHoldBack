@@ -29,3 +29,7 @@ PORT=7000
 
 POSTGRES_HOST=postgres
 
+# pgAdmin для работы с базой
+PGADMIN_EMAIL=admin@example.com
+PGADMIN_PASSWORD=admin
+PGADMIN_PORT=5050
