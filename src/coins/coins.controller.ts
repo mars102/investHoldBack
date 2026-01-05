@@ -55,7 +55,7 @@ export class CoinsController {
         }
     })
     @Post()
-    @Roles('admin')
+    @Roles('ADMIN')
     @UseGuards(RolesGuard)
     @UsePipes(new ValidationPipe({ transform: true }))
     @HttpCode(HttpStatus.CREATED)
