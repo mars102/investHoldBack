@@ -7,6 +7,8 @@ export class RolesGuard implements CanActivate {
 
     canActivate(context: ExecutionContext): boolean {
         const requiredRoles = this.reflector.get<string[]>('roles', context.getHandler());
+
+        // Если роли не требуются - пропускаем
         if (!requiredRoles) {
             return true;
         }
@@ -14,13 +16,20 @@ export class RolesGuard implements CanActivate {
         const request = context.switchToHttp().getRequest();
         const user = request.user;
 
-        if (!user) {
-            throw new ForbiddenException('Пользователь не авторизован');
+        // JwtAuthGuard уже добавил пользователя
+        if (!user || !user.roles) {
+            throw new ForbiddenException('Пользователь не найден');
         }
 
-        // Предполагаем, что у пользователя есть поле role
-        if (user.role !== 'admin') {
-            throw new ForbiddenException('Доступ только для администраторов');
+        // Извлекаем значения ролей из массива объектов
+        // В вашем токене: "roles": [{"id": 2, "value": "ADMIN", ...}]
+        const userRoles = user.roles.map(role => role.value);
+
+        // Проверяем, есть ли у пользователя хотя бы одна из требуемых ролей
+        const hasRole = requiredRoles.some(role => userRoles.includes(role));
+
+        if (!hasRole) {
+            throw new ForbiddenException('Недостаточно прав. Требуемые роли: ' + requiredRoles.join(', '));
         }
 
         return true;

@@ -6,6 +6,7 @@ import { CoinsService } from "./coins.service";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Coin } from "./coin.model";
+import {JwtAuthGuard} from "../auth/jwt-auth.guard";
 
 @ApiTags('coins')
 @ApiBearerAuth()
@@ -56,7 +57,7 @@ export class CoinsController {
     })
     @Post()
     @Roles('ADMIN')
-    @UseGuards(RolesGuard)
+    @UseGuards(JwtAuthGuard, RolesGuard)
     @UsePipes(new ValidationPipe({ transform: true }))
     @HttpCode(HttpStatus.CREATED)
     createCoin(@Body() dto: CreateCoinDto) {
@@ -106,6 +107,7 @@ export class CoinsController {
         example: 1
     })
     @Get(':id')
+    @UseGuards(JwtAuthGuard)
     getCoin(@Param('id', ParseIntPipe) id: number) {
         return this.coinsService.findOne(id);
     }
@@ -161,8 +163,8 @@ export class CoinsController {
         }
     })
     @Put(':id')
-    @Roles('admin')
-    @UseGuards(RolesGuard)
+    @Roles('ADMIN')
+    @UseGuards(JwtAuthGuard, RolesGuard)
     updateCoin(
         @Param('id', ParseIntPipe) id: number,
         @Body() dto: UpdateCoinDto,
@@ -198,8 +200,8 @@ export class CoinsController {
         example: 1
     })
     @Delete(':id')
-    @Roles('admin')
-    @UseGuards(RolesGuard)
+    @Roles('ADMIN')
+    @UseGuards(JwtAuthGuard, RolesGuard)
     @HttpCode(HttpStatus.NO_CONTENT)
     deleteCoin(@Param('id', ParseIntPipe) id: number) {
         return this.coinsService.remove(id);
