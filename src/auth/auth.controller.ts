@@ -1,8 +1,10 @@
-import { Body, Controller, Post, HttpCode } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Body, Controller, Post, HttpCode, Get, Req, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { Request } from 'express';
 import { CreateUserDto } from '../users/dto/create-user.dto';
-import { LoginDto } from './dto/login.dto'; // <-- Импортируем новый DTO
+import { LoginDto } from './dto/login.dto';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 @ApiTags('Авторизация')
 @Controller('auth')
@@ -24,5 +26,16 @@ export class AuthController {
     @Post('/registration')
     async registration(@Body() userDto: CreateUserDto) {
         return this.authService.registration(userDto);
+    }
+
+    @ApiOperation({ summary: 'Получить данные текущего пользователя' })
+    @ApiBearerAuth()
+    @ApiResponse({ status: 200, description: 'Данные пользователя' })
+    @ApiResponse({ status: 401, description: 'Не авторизован' })
+    @Get('/me')
+    @UseGuards(JwtAuthGuard)
+    async getCurrentUser(@Req() req: Request) {
+        // В req.user будет объект пользователя, добавленный JwtAuthGuard
+        return req.user;
     }
 }
