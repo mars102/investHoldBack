@@ -18,7 +18,11 @@ import {CoinsModule} from "./coins/coins.module";
 import { Coin } from "./coins/coin.model"; // ✅ Добавляем импорт модели Coin
 import { FilesModule } from './files/files.module';
 import {ServeStaticModule} from "@nestjs/serve-static";
+import { TransactionsModule } from './transactions/transactions.module';
+import { HoldingsModule } from './holdings/holdings.module';
 import * as path from 'path';
+import {Transaction} from "./transactions/transaction.model";
+import {Holding} from "./holdings/holding.model";
 
 @Module({
     controllers: [],
@@ -39,7 +43,8 @@ import * as path from 'path';
             username: process.env.POSTGRES_USER ,
             password: process.env.POSTGRES_PASSWORD,
             database: process.env.POSTGRES_DB,
-            models: [User, Role, UserRoles, Post, Coin], // ✅ Добавляем Coin в список моделей
+            models: [User, Role, UserRoles, Post, Coin, Transaction,
+                Holding], // ✅ Добавляем Coin в список моделей
             autoLoadModels: true,
             synchronize: true,
         }),
@@ -49,6 +54,8 @@ import * as path from 'path';
         PostsModule,
         FilesModule,
         CoinsModule,
+        TransactionsModule,
+        HoldingsModule,
     ]
 })
 export class AppModule {}
