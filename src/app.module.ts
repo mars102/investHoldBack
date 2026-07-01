@@ -3,7 +3,7 @@
 import { config } from 'dotenv';
 config();
 import { DatabaseInitService } from './database/database-init.service';
-import {Module} from "@nestjs/common";
+import {Module, MiddlewareConsumer, NestModule} from "@nestjs/common";
 import {SequelizeModule} from "@nestjs/sequelize";
 import { UsersModule } from './users/users.module';
 import {ConfigModule} from "@nestjs/config";
@@ -15,7 +15,7 @@ import { AuthModule } from './auth/auth.module';
 import { PostsModule } from './posts/posts.module';
 import {Post} from "./posts/posts.model";
 import {CoinsModule} from "./coins/coins.module";
-import { Coin } from "./coins/coin.model"; // ✅ Добавляем импорт модели Coin
+import { Coin } from "./coins/coin.model";
 import { FilesModule } from './files/files.module';
 import {ServeStaticModule} from "@nestjs/serve-static";
 import { TransactionsModule } from './transactions/transactions.module';
@@ -23,13 +23,14 @@ import { HoldingsModule } from './holdings/holdings.module';
 import * as path from 'path';
 import {Transaction} from "./transactions/transaction.model";
 import {Holding} from "./holdings/holding.model";
+import { LoggerMiddleware } from './logger.middleware'; // 👈 добавили импорт
 
 @Module({
     controllers: [],
     providers: [DatabaseInitService],
     imports: [
         ConfigModule.forRoot({
-            envFilePath: '.env',  // ✅ Один файл
+            envFilePath: '.env',
             isGlobal: true,
         }),
         ServeStaticModule.forRoot({
@@ -43,8 +44,7 @@ import {Holding} from "./holdings/holding.model";
             username: process.env.POSTGRES_USER ,
             password: process.env.POSTGRES_PASSWORD,
             database: process.env.POSTGRES_DB,
-            models: [User, Role, UserRoles, Post, Coin, Transaction,
-                Holding], // ✅ Добавляем Coin в список моделей
+            models: [User, Role, UserRoles, Post, Coin, Transaction, Holding],
             autoLoadModels: true,
             synchronize: true,
         }),
@@ -58,4 +58,8 @@ import {Holding} from "./holdings/holding.model";
         HoldingsModule,
     ]
 })
-export class AppModule {}
+export class AppModule implements NestModule { // 👈 добавили implements NestModule
+    configure(consumer: MiddlewareConsumer) { // 👈 добавили этот метод
+        consumer.apply(LoggerMiddleware).forRoutes('*');
+    }
+}
