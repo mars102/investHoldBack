@@ -7,6 +7,7 @@ import {Module} from "@nestjs/common";
 import {SequelizeModule} from "@nestjs/sequelize";
 import { UsersModule } from './users/users.module';
 import {ConfigModule} from "@nestjs/config";
+import {ScheduleModule} from "@nestjs/schedule";
 import {User} from "./users/users.model";
 import { RolesModule } from './roles/roles.module';
 import {Role} from "./roles/roles.model";
@@ -32,6 +33,7 @@ import {Holding} from "./holdings/holding.model";
             envFilePath: '.env',  // ✅ Один файл
             isGlobal: true,
         }),
+        ScheduleModule.forRoot(),
         ServeStaticModule.forRoot({
             rootPath: path.resolve( __dirname, 'static'),
         }),

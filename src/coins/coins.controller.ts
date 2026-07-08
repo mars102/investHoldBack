@@ -206,4 +206,55 @@ export class CoinsController {
     deleteCoin(@Param('id', ParseIntPipe) id: number) {
         return this.coinsService.remove(id);
     }
+
+    @ApiOperation({
+        summary: 'Обновление текущей цены монеты',
+        description: 'Запрашивает актуальную цену монеты в CoinGecko (по её externalId) и сохраняет её. Доступно всем авторизованным пользователям.'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Цена монеты обновлена',
+        type: Coin
+    })
+    @ApiResponse({
+        status: HttpStatus.BAD_REQUEST,
+        description: 'У монеты не задан externalId или цену не удалось получить'
+    })
+    @ApiResponse({
+        status: HttpStatus.NOT_FOUND,
+        description: 'Монета с указанным ID не найдена'
+    })
+    @ApiParam({
+        name: 'id',
+        type: Number,
+        description: 'ID монеты, цену которой нужно обновить',
+        required: true,
+        example: 1
+    })
+    @Post(':id/refresh-price')
+    @UseGuards(JwtAuthGuard)
+    @HttpCode(HttpStatus.OK)
+    refreshCoinPrice(@Param('id', ParseIntPipe) id: number) {
+        return this.coinsService.refreshPrice(id);
+    }
+
+    @ApiOperation({
+        summary: 'Обновление цен всех монет',
+        description: 'Только для администраторов. Запрашивает у CoinGecko актуальные цены всех активных монет с заданным externalId и обновляет их.'
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Возвращает количество обновлённых монет и список тикеров, для которых обновление не удалось',
+    })
+    @ApiResponse({
+        status: HttpStatus.FORBIDDEN,
+        description: 'Недостаточно прав (требуется роль admin)'
+    })
+    @Post('refresh-prices')
+    @Roles('ADMIN')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @HttpCode(HttpStatus.OK)
+    refreshAllPrices() {
+        return this.coinsService.refreshAllPrices();
+    }
 }

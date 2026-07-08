@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
+import { HttpModule } from '@nestjs/axios';
 import { CoinsController } from './coins.controller';
 import { CoinsService } from './coins.service';
 import { Coin } from './coin.model';
@@ -9,6 +10,7 @@ import { AuthModule } from '../auth/auth.module'; // ✅ Импортируйт�
     imports: [
         SequelizeModule.forFeature([Coin]),
         AuthModule, // ✅ Теперь guards будут доступны
+        HttpModule.register({ timeout: 10000 }),
     ],
     controllers: [CoinsController],
     providers: [CoinsService],
