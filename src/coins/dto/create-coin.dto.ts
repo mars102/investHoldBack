@@ -21,9 +21,9 @@ export class CreateCoinDto {
     @Length(1, 10)
     currency: string;
 
-    @IsOptional()
     @IsString()
-    externalId?: string;
+    @Length(1, 100)
+    externalId: string;
 
     @IsOptional()
     @IsUrl()

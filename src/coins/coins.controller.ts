@@ -50,7 +50,8 @@ export class CoinsController {
                     fullName: 'Bitcoin',
                     description: 'Первая децентрализованная криптовалюта',
                     currentPrice: 50000,
-                    currency: 'USD'
+                    currency: 'USD',
+                    externalId: 'bitcoin'
                 }
             }
         }
