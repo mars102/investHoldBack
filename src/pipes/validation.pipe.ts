@@ -1,11 +1,15 @@
-// src/pipes/validation.pipe.ts
 import { PipeTransform, Injectable, ArgumentMetadata, BadRequestException } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToClass } from 'class-transformer';
 
 @Injectable()
 export class ValidationPipe implements PipeTransform<any> {
-    async transform(value: any, { metatype }: ArgumentMetadata) {
+    async transform(value: any, { metatype, type }: ArgumentMetadata) {
+        // Валидируем только тело запроса (@Body()), пропускаем @Param(), @Query(), кастомные декораторы
+        if (type !== 'body') {
+            return value;
+        }
+
         if (!metatype || !this.toValidate(metatype)) {
             return value;
         }
