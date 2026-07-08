@@ -1,7 +1,8 @@
-import { Body, Controller, Post, Get, Param, Put, Delete, UseGuards, UsePipes, ValidationPipe, ParseIntPipe, HttpStatus, HttpCode } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
+import { Body, Controller, Post, Get, Param, Put, Delete, Query, UseGuards, UsePipes, ValidationPipe, ParseIntPipe, HttpStatus, HttpCode } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateCoinDto } from "./dto/create-coin.dto";
 import { UpdateCoinDto } from "./dto/update-coin.dto";
+import { PriceHistoryPointDto } from "./dto/price-history-point.dto";
 import { CoinsService } from "./coins.service";
 import { Roles } from "../auth/decorators/roles.decorator";
 import { RolesGuard } from "../auth/guards/roles.guard";
@@ -257,5 +258,35 @@ export class CoinsController {
     @HttpCode(HttpStatus.OK)
     refreshAllPrices() {
         return this.coinsService.refreshAllPrices();
+    }
+
+    @ApiOperation({
+        summary: 'История цены монеты для графика',
+        description:
+            'Возвращает точки цены монеты за выбранный период. Данные берутся из локальной истории ' +
+            '(накапливается при каждом обновлении цены); если локальных данных не хватает на весь период ' +
+            'и у монеты задан externalId, недостающая часть доборается у CoinGecko и сохраняется на будущее.',
+    })
+    @ApiResponse({
+        status: HttpStatus.OK,
+        description: 'Список точек цены по возрастанию времени',
+        type: [PriceHistoryPointDto],
+    })
+    @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Неверный период' })
+    @ApiResponse({ status: HttpStatus.NOT_FOUND, description: 'Монета с указанным ID не найдена' })
+    @ApiParam({ name: 'id', type: Number, description: 'ID монеты', required: true, example: 1 })
+    @ApiQuery({
+        name: 'period',
+        required: false,
+        enum: ['24h', '7d', '30d', '90d', '1y', 'all'],
+        description: 'Период истории (по умолчанию 7d)',
+    })
+    @Get(':id/history')
+    @UseGuards(JwtAuthGuard)
+    getCoinPriceHistory(
+        @Param('id', ParseIntPipe) id: number,
+        @Query('period') period?: '24h' | '7d' | '30d' | '90d' | '1y' | 'all',
+    ) {
+        return this.coinsService.getPriceHistory(id, period);
     }
 }

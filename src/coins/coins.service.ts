@@ -3,7 +3,9 @@ import { InjectModel } from '@nestjs/sequelize';
 import { HttpService } from '@nestjs/axios';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { firstValueFrom } from 'rxjs';
+import { Op } from 'sequelize';
 import { Coin } from './coin.model';
+import { PriceHistory } from './price-history.model';
 import { CreateCoinDto } from './dto/create-coin.dto';
 import { UpdateCoinDto } from './dto/update-coin.dto';
 
@@ -14,6 +16,17 @@ interface CoinGeckoPriceEntry {
 const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
 const COINGECKO_IDS_CHUNK_SIZE = 100;
 
+const HISTORY_PERIODS = {
+    '24h': 1,
+    '7d': 7,
+    '30d': 30,
+    '90d': 90,
+    '1y': 365,
+    all: 'max',
+} as const;
+
+type HistoryPeriod = keyof typeof HISTORY_PERIODS;
+
 @Injectable()
 export class CoinsService {
     private readonly logger = new Logger(CoinsService.name);
@@ -21,6 +34,8 @@ export class CoinsService {
     constructor(
         @InjectModel(Coin)
         private coinModel: typeof Coin,
+        @InjectModel(PriceHistory)
+        private priceHistoryModel: typeof PriceHistory,
         private httpService: HttpService,
     ) {}
 
@@ -101,6 +116,7 @@ export class CoinsService {
         coin.currentPrice = price;
         coin.priceUpdatedAt = new Date();
         await coin.save();
+        await this.recordPriceHistory(coin);
 
         return coin;
     }
@@ -129,6 +145,7 @@ export class CoinsService {
 
         this.applyPriceEntry(coin, entry, vsCurrency);
         await coin.save();
+        await this.recordPriceHistory(coin);
 
         return coin;
     }
@@ -170,6 +187,7 @@ export class CoinsService {
 
                         this.applyPriceEntry(coin, entry, vsCurrency);
                         await coin.save();
+                        await this.recordPriceHistory(coin);
                         updated++;
                     }
                 } catch (error) {
@@ -194,6 +212,83 @@ export class CoinsService {
             this.logger.log(`Автообновление цен: обновлено ${updated}, ошибок ${failed.length}`);
         } catch (error) {
             this.logger.error(`Автообновление цен завершилось с ошибкой: ${error?.message || error}`);
+        }
+    }
+
+    /**
+     * Возвращает историю цены монеты за период для построения графика.
+     * Если локальных данных за период недостаточно, доборает их у CoinGecko и сохраняет на будущее.
+     */
+    async getPriceHistory(id: number, period: HistoryPeriod = '7d'): Promise<{ timestamp: Date; price: number }[]> {
+        const daysConfig = HISTORY_PERIODS[period];
+        if (!daysConfig) {
+            throw new BadRequestException(
+                `Неверный период "${period}". Допустимые значения: ${Object.keys(HISTORY_PERIODS).join(', ')}`,
+            );
+        }
+
+        const coin = await this.findOne(id);
+        const since = daysConfig === 'max' ? null : new Date(Date.now() - daysConfig * 24 * 60 * 60 * 1000);
+
+        const earliestLocal = await this.priceHistoryModel.findOne({
+            where: { coinId: id },
+            order: [['recordedAt', 'ASC']],
+        });
+
+        // 10-минутный запас на случай неровных интервалов снапшотов
+        const bufferMs = 10 * 60 * 1000;
+        const needsBackfill =
+            !!coin.externalId &&
+            (!earliestLocal || (since !== null && earliestLocal.recordedAt.getTime() > since.getTime() + bufferMs));
+
+        if (needsBackfill) {
+            await this.backfillPriceHistory(coin, daysConfig, earliestLocal?.recordedAt ?? null);
+        }
+
+        const rows = await this.priceHistoryModel.findAll({
+            where: since ? { coinId: id, recordedAt: { [Op.gte]: since } } : { coinId: id },
+            order: [['recordedAt', 'ASC']],
+        });
+
+        return rows.map((row) => ({ timestamp: row.recordedAt, price: parseFloat(row.price.toString()) }));
+    }
+
+    private async recordPriceHistory(coin: Coin, recordedAt: Date = new Date()): Promise<void> {
+        await this.priceHistoryModel.create({
+            coinId: coin.id,
+            price: coin.currentPrice,
+            recordedAt,
+        });
+    }
+
+    /**
+     * Запрашивает у CoinGecko историю цены и сохраняет точки, которые старше уже имеющихся локальных данных.
+     */
+    private async backfillPriceHistory(
+        coin: Coin,
+        days: number | 'max',
+        olderThan: Date | null,
+    ): Promise<void> {
+        try {
+            const vsCurrency = (coin.currency || 'USD').toLowerCase();
+            const response = await firstValueFrom(
+                this.httpService.get<{ prices: [number, number][] }>(
+                    `${COINGECKO_BASE_URL}/coins/${coin.externalId}/market_chart`,
+                    { params: { vs_currency: vsCurrency, days } },
+                ),
+            );
+
+            const points = response.data.prices
+                .filter(([ms]) => !olderThan || ms < olderThan.getTime())
+                .map(([ms, price]) => ({ coinId: coin.id, price, recordedAt: new Date(ms) }));
+
+            if (points.length > 0) {
+                await this.priceHistoryModel.bulkCreate(points);
+            }
+        } catch (error: any) {
+            this.logger.warn(
+                `Не удалось добрать историю цены для ${coin.ticker} у CoinGecko: ${error?.message || error}`,
+            );
         }
     }
 

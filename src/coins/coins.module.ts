@@ -4,11 +4,12 @@ import { HttpModule } from '@nestjs/axios';
 import { CoinsController } from './coins.controller';
 import { CoinsService } from './coins.service';
 import { Coin } from './coin.model';
+import { PriceHistory } from './price-history.model';
 import { AuthModule } from '../auth/auth.module'; // ✅ Импортируйте AuthModule
 
 @Module({
     imports: [
-        SequelizeModule.forFeature([Coin]),
+        SequelizeModule.forFeature([Coin, PriceHistory]),
         AuthModule, // ✅ Теперь guards будут доступны
         HttpModule.register({ timeout: 10000 }),
     ],
