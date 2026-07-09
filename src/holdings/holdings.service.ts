@@ -85,13 +85,55 @@ export class HoldingsService {
     }
 
     async revertHoldingsAfterTransaction(userId: number, transaction: Transaction): Promise<void> {
-        // Создаем копию транзакции с противоположным типом для отмены
-        const revertedTransaction = { ...transaction.toJSON() } as any;
-        revertedTransaction.type =
-            transaction.type === TransactionType.BUY ? TransactionType.SELL : TransactionType.BUY;
+        // Отменяем влияние сделки на холдинг. Нельзя просто "провести обратную сделку" —
+        // при продаже средняя цена не пересчитывается (это математически верно для реальных продаж),
+        // поэтому её нужно точно вычесть/восстановить, а не эмулировать sell/buy наоборот.
+        await this.sequelize.transaction(async (t) => {
+            const holding = await this.holdingRepository.findOne({
+                where: { userId, coinId: transaction.coinId },
+                transaction: t,
+            });
 
-        // Используем существующий метод для отмены влияния
-        await this.updateHoldingsAfterTransaction(userId, revertedTransaction as Transaction);
+            if (!holding) {
+                return;
+            }
+
+            const quantity = parseFloat(transaction.quantity.toString());
+            const totalQuantity = parseFloat(holding.totalQuantity.toString());
+            const averageBuyPrice = parseFloat(holding.averageBuyPrice.toString());
+
+            let newTotalQuantity: number;
+            let newTotalInvested: number;
+
+            if (transaction.type === TransactionType.BUY) {
+                // Точно вычитаем то, что добавила эта покупка
+                newTotalQuantity = totalQuantity - quantity;
+                newTotalInvested = parseFloat(holding.totalInvested.toString()) - parseFloat(transaction.totalAmount.toString());
+            } else {
+                // Продажа не меняла среднюю цену покупки — восстанавливаем количество
+                // и пересчитываем инвестиции по прежней (неизменной) средней цене
+                newTotalQuantity = totalQuantity + quantity;
+                newTotalInvested = averageBuyPrice * newTotalQuantity;
+            }
+
+            if (newTotalQuantity <= 0) {
+                await holding.destroy({ transaction: t });
+                return;
+            }
+
+            const currentPrice = transaction.coin?.currentPrice || 0;
+
+            holding.totalQuantity = newTotalQuantity;
+            holding.totalInvested = newTotalInvested;
+            holding.averageBuyPrice = newTotalInvested / newTotalQuantity;
+            holding.currentValue = newTotalQuantity * currentPrice;
+            holding.profitLossAbsolute = holding.currentValue - newTotalInvested;
+            holding.profitLossPercentage = newTotalInvested > 0
+                ? (holding.profitLossAbsolute / newTotalInvested) * 100
+                : 0;
+
+            await holding.save({ transaction: t });
+        });
     }
 
     async getUserHoldings(userId: number): Promise<Holding[]> {
