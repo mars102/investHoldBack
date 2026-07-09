@@ -34,6 +34,10 @@ export class TransactionsService {
             executedAt: dto.executedAt || new Date(),
         });
 
+        // Подгружаем монету — без неё updateHoldingsAfterTransaction не знает текущую цену
+        // и посчитает currentValue/profit по цене 0
+        await transaction.reload({ include: ['coin'] });
+
         // Обновляем холдинги пользователя
         await this.holdingsService.updateHoldingsAfterTransaction(userId, transaction);
 

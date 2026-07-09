@@ -21,9 +21,14 @@ export class HoldingsService {
                 transaction: t,
             });
 
-            const currentPrice = transaction.coin?.currentPrice || 0;
-            const quantity = transaction.type === TransactionType.BUY ? transaction.quantity : -transaction.quantity;
-            const investedAmount = transaction.totalAmount;
+            // Sequelize/pg возвращает DECIMAL-колонки строками при чтении из БД (а не числами) —
+            // без явного parseFloat "+"/"+=" превращается в конкатенацию строк, а не сложение
+            const currentPrice = parseFloat((transaction.coin?.currentPrice ?? 0).toString());
+            const txQuantity = parseFloat(transaction.quantity.toString());
+            const txTotalAmount = parseFloat(transaction.totalAmount.toString());
+            const txPricePerUnit = parseFloat(transaction.pricePerUnit.toString());
+            const quantity = transaction.type === TransactionType.BUY ? txQuantity : -txQuantity;
+            const investedAmount = txTotalAmount;
 
             if (holding) {
                 // Обновляем существующий холдинг
@@ -42,7 +47,7 @@ export class HoldingsService {
                         newAveragePrice = newTotalInvested / newTotalQuantity;
                     } else if (transaction.type === TransactionType.SELL) {
                         // При продажах уменьшаем общую сумму инвестиций пропорционально
-                        const proportionSold = transaction.quantity / parseFloat(holding.totalQuantity.toString());
+                        const proportionSold = txQuantity / parseFloat(holding.totalQuantity.toString());
                         newTotalInvested -= parseFloat(holding.totalInvested.toString()) * proportionSold;
                     }
 
@@ -60,19 +65,19 @@ export class HoldingsService {
                 }
             } else if (transaction.type === TransactionType.BUY) {
                 // Создаем новый холдинг только для покупок
-                const currentValue = transaction.quantity * currentPrice;
-                const profitLossAbsolute = currentValue - transaction.totalAmount;
-                const profitLossPercentage = transaction.totalAmount > 0
-                    ? (profitLossAbsolute / transaction.totalAmount) * 100
+                const currentValue = txQuantity * currentPrice;
+                const profitLossAbsolute = currentValue - txTotalAmount;
+                const profitLossPercentage = txTotalAmount > 0
+                    ? (profitLossAbsolute / txTotalAmount) * 100
                     : 0;
 
                 // Создаем холдинг без расчетных полей
                 const newHolding = await this.holdingRepository.create({
                     userId,
                     coinId: transaction.coinId,
-                    totalQuantity: transaction.quantity,
-                    averageBuyPrice: transaction.pricePerUnit,
-                    totalInvested: transaction.totalAmount,
+                    totalQuantity: txQuantity,
+                    averageBuyPrice: txPricePerUnit,
+                    totalInvested: txTotalAmount,
                 }, { transaction: t });
 
                 // Затем обновляем расчетные поля
