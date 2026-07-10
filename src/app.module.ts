@@ -21,6 +21,7 @@ import { FilesModule } from './files/files.module';
 import {ServeStaticModule} from "@nestjs/serve-static";
 import { TransactionsModule } from './transactions/transactions.module';
 import { HoldingsModule } from './holdings/holdings.module';
+import { FeedModule } from './feed/feed.module';
 import * as path from 'path';
 import {Transaction} from "./transactions/transaction.model";
 import {Holding} from "./holdings/holding.model";
@@ -59,6 +60,7 @@ import { LoggerMiddleware } from './logger.middleware'; // 👈 добавили
         CoinsModule,
         TransactionsModule,
         HoldingsModule,
+        FeedModule,
     ]
 })
 export class AppModule implements NestModule { // 👈 добавили implements NestModule
