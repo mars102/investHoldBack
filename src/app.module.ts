@@ -26,6 +26,7 @@ import * as path from 'path';
 import {Transaction} from "./transactions/transaction.model";
 import {Holding} from "./holdings/holding.model";
 import { PriceHistory } from "./coins/price-history.model";
+import { PostMedia } from "./posts/post-media.model";
 import { LoggerMiddleware } from './logger.middleware'; // 👈 добавили импорт
 
 @Module({
@@ -48,7 +49,7 @@ import { LoggerMiddleware } from './logger.middleware'; // 👈 добавили
             username: process.env.POSTGRES_USER ,
             password: process.env.POSTGRES_PASSWORD,
             database: process.env.POSTGRES_DB,
-            models: [User, Role, UserRoles, Post, Coin, Transaction, Holding, PriceHistory],
+            models: [User, Role, UserRoles, Post, PostMedia, Coin, Transaction, Holding, PriceHistory],
             autoLoadModels: true,
             synchronize: true,
         }),

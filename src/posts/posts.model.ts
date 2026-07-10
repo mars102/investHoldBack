@@ -1,14 +1,14 @@
-import { BelongsTo, Column, CreatedAt, DataType, ForeignKey, Model, Table, UpdatedAt } from "sequelize-typescript";
+import { BelongsTo, Column, CreatedAt, DataType, ForeignKey, HasMany, Model, Table, UpdatedAt } from "sequelize-typescript";
 import { ApiProperty } from "@nestjs/swagger";
 import { User } from "../users/users.model";
 import { Coin } from "../coins/coin.model";
+import { PostMedia } from "./post-media.model";
 
 interface PostCreationAttrs {
     title: string;
     content: string;
     userId: number;
     coinId?: number;
-    image?: string;
 }
 
 @Table({ tableName: 'posts' })
@@ -25,9 +25,9 @@ export class Post extends Model<Post, PostCreationAttrs> {
     @Column({ type: DataType.TEXT, allowNull: false })
     content: string;
 
-    @ApiProperty({ example: 'image.jpg', description: 'Изображение поста', required: false })
-    @Column({ type: DataType.STRING, allowNull: true })
-    image: string;
+    @ApiProperty({ type: () => [PostMedia], description: 'Картинки/видео, прикреплённые к посту' })
+    @HasMany(() => PostMedia)
+    media: PostMedia[];
 
     @ApiProperty({ example: 1, description: 'ID автора поста' })
     @ForeignKey(() => User)
