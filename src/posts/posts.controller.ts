@@ -24,7 +24,7 @@ import { Post } from './posts.model';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { User } from '../users/users.model';
-import { UploadedFile } from '../files/files.service';
+import { buildPublicBaseUrl, UploadedFile } from '../files/files.service';
 
 const MEDIA_FIELD = 'media';
 const MAX_MEDIA_FILES = 10;
@@ -136,6 +136,6 @@ export class PostsController {
     }
 
     private toResponse(req: Request, post: Post) {
-        return this.postService.toPlain(post, `${req.protocol}://${req.get('host')}`);
+        return this.postService.toPlain(post, buildPublicBaseUrl(req));
     }
 }

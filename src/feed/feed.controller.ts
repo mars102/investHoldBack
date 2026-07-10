@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { User } from '../users/users.model';
 import { FeedService, FeedType } from './feed.service';
+import { buildPublicBaseUrl } from '../files/files.service';
 
 @ApiTags('Feed')
 @ApiBearerAuth()
@@ -61,7 +62,7 @@ export class FeedController {
             coinId: coinId ? parseInt(coinId, 10) : undefined,
             limit: limit ? parseInt(limit, 10) : undefined,
             offset: offset ? parseInt(offset, 10) : undefined,
-            mediaBaseUrl: `${req.protocol}://${req.get('host')}`,
+            mediaBaseUrl: buildPublicBaseUrl(req),
         });
     }
 }

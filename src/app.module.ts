@@ -40,6 +40,9 @@ import { LoggerMiddleware } from './logger.middleware'; // 👈 добавили
         ScheduleModule.forRoot(),
         ServeStaticModule.forRoot({
             rootPath: path.resolve( __dirname, 'static'),
+            // Раздаём загруженные файлы с префикса /uploads, а не с корня —
+            // на / обычно висит фронтенд (SPA) за nginx, и корневые пути до Node не доходят
+            serveRoot: '/uploads',
         }),
 
         SequelizeModule.forRoot({

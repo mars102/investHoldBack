@@ -9,6 +9,19 @@ export interface UploadedFile {
     originalname: string;
 }
 
+// nginx проксирует запросы на бэкенд под префиксом /backend (со срезанием самого префикса),
+// поэтому наружу видимые URL должны его учитывать — сам Node о префиксе не знает.
+// Переопределяется через PUBLIC_BASE_PATH, если понадобится другое окружение (например, без nginx).
+const DEFAULT_PUBLIC_BASE_PATH = '/backend';
+
+/**
+ * Строит публично доступный базовый URL приложения по текущему запросу.
+ */
+export function buildPublicBaseUrl(req: { protocol: string; get: (name: string) => string | undefined }): string {
+    const prefix = process.env.PUBLIC_BASE_PATH ?? DEFAULT_PUBLIC_BASE_PATH;
+    return `${req.protocol}://${req.get('host')}${prefix}`;
+}
+
 const MIME_EXTENSIONS: Record<string, string> = {
     'image/jpeg': '.jpg',
     'image/png': '.png',

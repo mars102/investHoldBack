@@ -103,7 +103,7 @@ export class PostsService {
 
             await this.postMediaRepository.create({
                 postId,
-                url: `/${fileName}`,
+                url: `/uploads/${fileName}`,
                 type: file.mimetype.startsWith('video/') ? PostMediaType.VIDEO : PostMediaType.IMAGE,
                 mimeType: file.mimetype,
                 order: startOrder + i,
@@ -129,7 +129,8 @@ export class PostsService {
     }
 
     private toFileName(url: string): string {
-        return url.replace(/^\//, '');
+        // На диске файлы лежат плоско в /static, а в БД url хранится с префиксом /uploads/
+        return url.replace(/^\/uploads\//, '');
     }
 
     /**
