@@ -9,6 +9,7 @@ export interface FeedOptions {
     coinId?: number;
     limit?: number;
     offset?: number;
+    mediaBaseUrl: string;
 }
 
 @Injectable()
@@ -19,7 +20,7 @@ export class FeedService {
     ) {}
 
     async getFeed(userId: number, options: FeedOptions) {
-        const { type = 'all', coinId, limit = 20, offset = 0 } = options;
+        const { type = 'all', coinId, limit = 20, offset = 0, mediaBaseUrl } = options;
 
         const [transactions, posts] = await Promise.all([
             type !== 'posts' ? this.getTransactions(userId, coinId) : Promise.resolve([]),
@@ -35,7 +36,7 @@ export class FeedService {
             ...posts.map((post) => ({
                 type: 'post' as const,
                 date: post.createdAt,
-                item: post,
+                item: this.postsService.toPlain(post, mediaBaseUrl),
             })),
         ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 

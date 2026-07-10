@@ -1,4 +1,5 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
+import { Request } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -48,6 +49,7 @@ export class FeedController {
         },
     })
     getFeed(
+        @Req() req: Request,
         @CurrentUser() user: User,
         @Query('type') type?: FeedType,
         @Query('coinId') coinId?: string,
@@ -59,6 +61,7 @@ export class FeedController {
             coinId: coinId ? parseInt(coinId, 10) : undefined,
             limit: limit ? parseInt(limit, 10) : undefined,
             offset: offset ? parseInt(offset, 10) : undefined,
+            mediaBaseUrl: `${req.protocol}://${req.get('host')}`,
         });
     }
 }

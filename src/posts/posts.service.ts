@@ -115,6 +115,19 @@ export class PostsService {
         post.media?.sort((a, b) => a.order - b.order);
     }
 
+    /**
+     * media.url в БД хранится как относительный путь ("/uuid.jpg"), который резолвится
+     * относительно хоста ФРОНТА, а не бэкенда — картинки не открываются. Поэтому на выдаче
+     * достраиваем абсолютный URL по хосту реального запроса (mediaBaseUrl = `${protocol}://${host}`).
+     */
+    toPlain(post: Post, mediaBaseUrl: string): Record<string, unknown> {
+        const json = post.toJSON() as any;
+        if (Array.isArray(json.media)) {
+            json.media = json.media.map((media: any) => ({ ...media, url: `${mediaBaseUrl}${media.url}` }));
+        }
+        return json;
+    }
+
     private toFileName(url: string): string {
         return url.replace(/^\//, '');
     }
