@@ -16,13 +16,13 @@ export class FeedController {
 
     @Get()
     @ApiOperation({
-        summary: 'Единая лента сделок и постов пользователя',
+        summary: 'Единая лента сделок, постов и авто-инсайтов пользователя',
         description:
-            'Объединяет сделки пользователя и его посты (заметки без сделки) в одну ленту, ' +
-            'отсортированную по дате от новых к старым. Можно показать только сделки, только посты, ' +
-            'или всё вместе, и отфильтровать по конкретной монете.',
+            'Объединяет сделки пользователя, его посты (заметки без сделки) и автоматически сгенерированные ' +
+            'инсайты по портфелю в одну ленту, отсортированную по дате от новых к старым. Можно показать только ' +
+            'сделки, только посты, только инсайты, или всё вместе, и отфильтровать по конкретной монете.',
     })
-    @ApiQuery({ name: 'type', required: false, enum: ['all', 'trades', 'posts'], description: 'Что показывать (по умолчанию all)' })
+    @ApiQuery({ name: 'type', required: false, enum: ['all', 'trades', 'posts', 'insights'], description: 'Что показывать (по умолчанию all)' })
     @ApiQuery({ name: 'coinId', required: false, type: Number, description: 'Фильтр по монете' })
     @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Размер страницы (по умолчанию 20)' })
     @ApiQuery({ name: 'offset', required: false, type: Number, description: 'Смещение для пагинации (по умолчанию 0)' })

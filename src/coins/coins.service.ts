@@ -253,6 +253,68 @@ export class CoinsService {
         return rows.map((row) => ({ timestamp: row.recordedAt, price: parseFloat(row.price.toString()) }));
     }
 
+    /**
+     * Мин/макс цены монеты за произвольный период [from, to] — используется для скоринга
+     * тайминга сделок. Если локальных данных за период недостаточно, доборает их у CoinGecko
+     * через market_chart/range (в отличие от getPriceHistory, здесь нужен именно произвольный
+     * исторический интервал, а не "последние N дней от сейчас").
+     */
+    async getPriceRange(coinId: number, from: Date, to: Date): Promise<{ min: number; max: number; points: number } | null> {
+        const coin = await this.findOne(coinId);
+
+        const coverage = await this.priceHistoryModel.count({
+            where: { coinId, recordedAt: { [Op.gte]: from, [Op.lte]: to } },
+        });
+
+        if (coverage < 2 && coin.externalId) {
+            await this.backfillPriceHistoryRange(coin, from, to);
+        }
+
+        const rows = await this.priceHistoryModel.findAll({
+            where: { coinId, recordedAt: { [Op.gte]: from, [Op.lte]: to } },
+            attributes: ['price'],
+        });
+
+        if (rows.length === 0) {
+            return null;
+        }
+
+        const prices = rows.map((row) => parseFloat(row.price.toString()));
+        return { min: Math.min(...prices), max: Math.max(...prices), points: prices.length };
+    }
+
+    private async backfillPriceHistoryRange(coin: Coin, from: Date, to: Date): Promise<void> {
+        try {
+            const vsCurrency = (coin.currency || 'USD').toLowerCase();
+            const response = await firstValueFrom(
+                this.httpService.get<{ prices: [number, number][] }>(
+                    `${COINGECKO_BASE_URL}/coins/${coin.externalId}/market_chart/range`,
+                    {
+                        params: {
+                            vs_currency: vsCurrency,
+                            from: Math.floor(from.getTime() / 1000),
+                            to: Math.floor(to.getTime() / 1000),
+                        },
+                    },
+                ),
+            );
+
+            const points = response.data.prices.map(([ms, price]) => ({
+                coinId: coin.id,
+                price,
+                recordedAt: new Date(ms),
+            }));
+
+            if (points.length > 0) {
+                await this.priceHistoryModel.bulkCreate(points, { ignoreDuplicates: true });
+            }
+        } catch (error: any) {
+            this.logger.warn(
+                `Не удалось добрать историю цены за период для ${coin.ticker} у CoinGecko: ${error?.message || error}`,
+            );
+        }
+    }
+
     private async recordPriceHistory(coin: Coin, recordedAt: Date = new Date()): Promise<void> {
         await this.priceHistoryModel.create({
             coinId: coin.id,
