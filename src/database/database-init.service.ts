@@ -2,16 +2,38 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Sequelize } from 'sequelize-typescript';
 import * as bcrypt from 'bcryptjs';
+import { CoinsService } from '../coins/coins.service';
 
 @Injectable()
 export class DatabaseInitService implements OnModuleInit {
-    constructor(private sequelize: Sequelize) {}
+    constructor(
+        private sequelize: Sequelize,
+        private coinsService: CoinsService,
+    ) {}
 
     async onModuleInit() {
         console.log('🚀 Инициализация базы данных...');
         await this.initializeRoles();
         await this.initializeAdminUser();
+        await this.initializeCoins();
         console.log('✅ Инициализация базы данных завершена');
+    }
+
+    private async initializeCoins() {
+        try {
+            console.log('🔄 Проверяем список монет...');
+            const { created, skipped } = await this.coinsService.seedTopCoins(100);
+
+            if (skipped) {
+                console.log('✅ Монеты уже есть в базе — сидинг топ-100 пропущен');
+            } else {
+                console.log(`✅ Загружено ${created} монет из топ-100 CoinGecko`);
+            }
+        } catch (error: any) {
+            // Не роняем старт приложения, если CoinGecko недоступен при деплое —
+            // список монет можно будет наполнить позже через POST /coins или повторным рестартом
+            console.error('❌ Не удалось засеять топ-100 монет:', error?.message || error);
+        }
     }
 
     private async initializeRoles() {

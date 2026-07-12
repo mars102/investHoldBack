@@ -13,6 +13,19 @@ interface CoinGeckoPriceEntry {
     [currencyKey: string]: number;
 }
 
+interface CoinGeckoMarketCoin {
+    id: string;
+    symbol: string;
+    name: string;
+    image: string;
+    current_price: number;
+    market_cap: number;
+    market_cap_rank: number;
+    total_volume: number;
+    price_change_24h: number;
+    price_change_percentage_24h: number;
+}
+
 const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
 const COINGECKO_IDS_CHUNK_SIZE = 100;
 
@@ -52,6 +65,57 @@ export class CoinsService {
             ...dto,
             priceUpdatedAt: new Date(),
         });
+    }
+
+    /**
+     * Разово наполняет таблицу монет топ-N по капитализации из CoinGecko.
+     * Вызывается при старте приложения (DatabaseInitService); если монеты уже есть — ничего не делает,
+     * чтобы не плодить дубли и не затирать то, что админ уже поправил руками.
+     */
+    async seedTopCoins(limit = 100): Promise<{ created: number; skipped: boolean }> {
+        const existingCount = await this.coinModel.count();
+        if (existingCount > 0) {
+            return { created: 0, skipped: true };
+        }
+
+        const response = await firstValueFrom(
+            this.httpService.get<CoinGeckoMarketCoin[]>(`${COINGECKO_BASE_URL}/coins/markets`, {
+                params: {
+                    vs_currency: 'usd',
+                    order: 'market_cap_desc',
+                    per_page: limit,
+                    page: 1,
+                    sparkline: false,
+                },
+            }),
+        );
+
+        const now = new Date();
+        const coinsToCreate = response.data.map((c) => ({
+            ticker: c.symbol.toUpperCase(),
+            fullName: c.name,
+            description: `${c.name} — топ-${c.market_cap_rank ?? '?'} криптовалюта по капитализации (добавлена автоматически при инициализации)`,
+            currentPrice: c.current_price ?? 0,
+            currency: 'USD',
+            externalId: c.id,
+            logoUrl: c.image,
+            marketCap: c.market_cap,
+            volume24h: c.total_volume,
+            priceChange24h: c.price_change_24h,
+            priceChangePercentage24h: c.price_change_percentage_24h,
+            rank: c.market_cap_rank,
+            priceUpdatedAt: now,
+        }));
+
+        const created = await this.coinModel.bulkCreate(coinsToCreate, { ignoreDuplicates: true });
+
+        if (created.length > 0) {
+            await this.priceHistoryModel.bulkCreate(
+                created.map((coin) => ({ coinId: coin.id, price: coin.currentPrice, recordedAt: now })),
+            );
+        }
+
+        return { created: created.length, skipped: false };
     }
 
     async findAll(): Promise<Coin[]> {
