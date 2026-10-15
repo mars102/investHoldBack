@@ -28,6 +28,15 @@ interface CoinGeckoMarketCoin {
 
 const COINGECKO_BASE_URL = 'https://api.coingecko.com/api/v3';
 const COINGECKO_IDS_CHUNK_SIZE = 100;
+// Публичный API CoinGecko отдаёт историю только за последние 365 дней (error_code 10012),
+// поэтому глубокую историю берём из дневных свечей Binance (зеркало только для рыночных данных, без гео-блокировок)
+const BINANCE_BASE_URL = 'https://data-api.binance.vision/api/v3';
+const BINANCE_KLINES_LIMIT = 1000;
+const BINANCE_QUOTE_BY_CURRENCY: Record<string, string> = { usd: 'USDT' };
+const COINGECKO_PUBLIC_HISTORY_DAYS = 365;
+
+// [openTime, open, high, low, close, volume, closeTime, ...]
+type BinanceKline = [number, string, string, string, string, string, number, ...unknown[]];
 
 const HISTORY_PERIODS = {
     '24h': 1,
@@ -40,9 +49,16 @@ const HISTORY_PERIODS = {
 
 type HistoryPeriod = keyof typeof HISTORY_PERIODS;
 
+// Порог "полной" истории для period=all: ранняя точка должна быть старше этого возраста
+const FULL_HISTORY_MIN_AGE_DAYS = 400;
+// Не чаще раза в час на монету+период: защита от rate limit, когда бэкфилл не помогает
+// (ошибка CoinGecko или монета моложе порога)
+const BACKFILL_RETRY_INTERVAL_MS = 60 * 60 * 1000;
+
 @Injectable()
 export class CoinsService {
     private readonly logger = new Logger(CoinsService.name);
+    private readonly lastBackfillAttempt = new Map<string, number>();
 
     constructor(
         @InjectModel(Coin)
@@ -301,9 +317,13 @@ export class CoinsService {
 
         // 10-минутный запас на случай неровных интервалов снапшотов
         const bufferMs = 10 * 60 * 1000;
-        const needsBackfill =
-            !!coin.externalId &&
-            (!earliestLocal || (since !== null && earliestLocal.recordedAt.getTime() > since.getTime() + bufferMs));
+        // Для "all" границы периода нет: считаем историю неполной, пока самая ранняя точка
+        // моложе FULL_HISTORY_MIN_AGE_DAYS (после бэкфилла max она уходит к старту монеты)
+        const shallowThreshold =
+            since ?? new Date(Date.now() - FULL_HISTORY_MIN_AGE_DAYS * 24 * 60 * 60 * 1000);
+        const isShallow =
+            !earliestLocal || earliestLocal.recordedAt.getTime() > shallowThreshold.getTime() + bufferMs;
+        const needsBackfill = isShallow && this.tryAcquireBackfillSlot(coin.id, daysConfig);
 
         if (needsBackfill) {
             await this.backfillPriceHistory(coin, daysConfig, earliestLocal?.recordedAt ?? null);
@@ -330,8 +350,12 @@ export class CoinsService {
             where: { coinId, recordedAt: { [Op.gte]: from, [Op.lte]: to } },
         });
 
-        if (coverage < 2 && coin.externalId) {
-            await this.backfillPriceHistoryRange(coin, from, to);
+        if (coverage < 2) {
+            const isBeyondCoinGecko = from.getTime() < Date.now() - COINGECKO_PUBLIC_HISTORY_DAYS * 24 * 60 * 60 * 1000;
+            const fromBinance = isBeyondCoinGecko ? await this.backfillFromBinance(coin, from, to) : 0;
+            if (fromBinance === 0 && coin.externalId) {
+                await this.backfillPriceHistoryRange(coin, from, to);
+            }
         }
 
         const rows = await this.priceHistoryModel.findAll({
@@ -379,6 +403,17 @@ export class CoinsService {
         }
     }
 
+    private tryAcquireBackfillSlot(coinId: number, days: number | 'max'): boolean {
+        const key = `${coinId}:${days}`;
+        const now = Date.now();
+        const last = this.lastBackfillAttempt.get(key);
+        if (last !== undefined && now - last < BACKFILL_RETRY_INTERVAL_MS) {
+            return false;
+        }
+        this.lastBackfillAttempt.set(key, now);
+        return true;
+    }
+
     private async recordPriceHistory(coin: Coin, recordedAt: Date = new Date()): Promise<void> {
         await this.priceHistoryModel.create({
             coinId: coin.id,
@@ -395,6 +430,21 @@ export class CoinsService {
         days: number | 'max',
         olderThan: Date | null,
     ): Promise<void> {
+        if (days === 'max' || days > COINGECKO_PUBLIC_HISTORY_DAYS) {
+            const fromBinance = await this.backfillFromBinance(
+                coin,
+                days === 'max' ? new Date(0) : new Date(Date.now() - days * 24 * 60 * 60 * 1000),
+                olderThan ?? new Date(),
+            );
+            if (fromBinance > 0) {
+                return;
+            }
+        }
+
+        if (!coin.externalId) {
+            return;
+        }
+
         try {
             const vsCurrency = (coin.currency || 'USD').toLowerCase();
             const response = await firstValueFrom(
@@ -416,6 +466,55 @@ export class CoinsService {
                 `Не удалось добрать историю цены для ${coin.ticker} у CoinGecko: ${error?.message || error}`,
             );
         }
+    }
+
+    /**
+     * Догружает дневные свечи Binance (пара TICKER/USDT) за [from, to) и сохраняет цену открытия
+     * с меткой 00:00 UTC — так же, как дневные точки CoinGecko. Возвращает число сохранённых точек;
+     * 0 — если пары нет, валюта не поддерживается или Binance ответил ошибкой.
+     */
+    private async backfillFromBinance(coin: Coin, from: Date, to: Date): Promise<number> {
+        const quote = BINANCE_QUOTE_BY_CURRENCY[(coin.currency || 'USD').toLowerCase()];
+        if (!quote || !coin.ticker || coin.ticker.toUpperCase() === quote) {
+            return 0;
+        }
+
+        const symbol = `${coin.ticker.toUpperCase()}${quote}`;
+        const endTime = to.getTime() - 1;
+        const points: { coinId: number; price: number; recordedAt: Date }[] = [];
+
+        try {
+            let startTime = from.getTime();
+            while (startTime <= endTime) {
+                const response = await firstValueFrom(
+                    this.httpService.get<BinanceKline[]>(`${BINANCE_BASE_URL}/klines`, {
+                        params: { symbol, interval: '1d', startTime, endTime, limit: BINANCE_KLINES_LIMIT },
+                    }),
+                );
+                const klines = response.data;
+
+                for (const [openTime, open] of klines) {
+                    points.push({ coinId: coin.id, price: parseFloat(open), recordedAt: new Date(openTime) });
+                }
+
+                if (klines.length < BINANCE_KLINES_LIMIT) {
+                    break;
+                }
+                startTime = klines[klines.length - 1][0] + 1;
+            }
+        } catch (error: any) {
+            this.logger.warn(
+                `Не удалось добрать историю цены для ${coin.ticker} у Binance (${symbol}): ${
+                    error?.response?.data?.msg || error?.message || error
+                }`,
+            );
+            return 0;
+        }
+
+        if (points.length > 0) {
+            await this.priceHistoryModel.bulkCreate(points, { ignoreDuplicates: true });
+        }
+        return points.length;
     }
 
     private applyPriceEntry(coin: Coin, entry: CoinGeckoPriceEntry, vsCurrency: string): void {
