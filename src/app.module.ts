@@ -29,6 +29,10 @@ import { PriceHistory } from "./coins/price-history.model";
 import { PostMedia } from "./posts/post-media.model";
 import { AnalyticsModule } from './analytics/analytics.module';
 import { Insight } from './analytics/insight.model';
+import { SupportModule } from './support/support.module';
+import { SupportTicket } from './support/support-ticket.model';
+import { SupportMessage } from './support/support-message.model';
+import { SupportAttachment } from './support/support-attachment.model';
 import { LoggerMiddleware } from './logger.middleware'; // 👈 добавили импорт
 
 @Module({
@@ -54,7 +58,7 @@ import { LoggerMiddleware } from './logger.middleware'; // 👈 добавили
             username: process.env.POSTGRES_USER ,
             password: process.env.POSTGRES_PASSWORD,
             database: process.env.POSTGRES_DB,
-            models: [User, Role, UserRoles, Post, PostMedia, Coin, Transaction, Holding, PriceHistory, Insight],
+            models: [User, Role, UserRoles, Post, PostMedia, Coin, Transaction, Holding, PriceHistory, Insight, SupportTicket, SupportMessage, SupportAttachment],
             autoLoadModels: true,
             synchronize: true,
         }),
@@ -68,6 +72,7 @@ import { LoggerMiddleware } from './logger.middleware'; // 👈 добавили
         HoldingsModule,
         FeedModule,
         AnalyticsModule,
+        SupportModule,
     ]
 })
 export class AppModule implements NestModule { // 👈 добавили implements NestModule
