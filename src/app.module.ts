@@ -33,6 +33,7 @@ import { SupportModule } from './support/support.module';
 import { SupportTicket } from './support/support-ticket.model';
 import { SupportMessage } from './support/support-message.model';
 import { SupportAttachment } from './support/support-attachment.model';
+import { AuthToken } from './auth/auth-token.model';
 import { LoggerMiddleware } from './logger.middleware'; // 👈 добавили импорт
 
 @Module({
@@ -58,7 +59,7 @@ import { LoggerMiddleware } from './logger.middleware'; // 👈 добавили
             username: process.env.POSTGRES_USER ,
             password: process.env.POSTGRES_PASSWORD,
             database: process.env.POSTGRES_DB,
-            models: [User, Role, UserRoles, Post, PostMedia, Coin, Transaction, Holding, PriceHistory, Insight, SupportTicket, SupportMessage, SupportAttachment],
+            models: [User, Role, UserRoles, Post, PostMedia, Coin, Transaction, Holding, PriceHistory, Insight, SupportTicket, SupportMessage, SupportAttachment, AuthToken],
             autoLoadModels: true,
             synchronize: true,
         }),

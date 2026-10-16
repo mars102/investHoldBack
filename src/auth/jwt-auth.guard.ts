@@ -1,12 +1,14 @@
 import {
     CanActivate,
     ExecutionContext,
+    HttpException,
     Injectable,
     UnauthorizedException,
     Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { isJwtRevoked } from './token-revocation';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -28,12 +30,21 @@ export class JwtAuthGuard implements CanActivate {
                 secret: process.env.PRIVATE_KEY || 'SECRET',
             });
 
+            // Токены, выданные до смены пароля (или удалённого пользователя), больше не действуют
+            if (await isJwtRevoked(payload)) {
+                throw new UnauthorizedException('Сессия устарела, войдите снова');
+            }
+
             // ✅ Добавляем пользователя в запрос
             request['user'] = payload;
 
             return true;
         } catch (error) {
             this.logger.error(`JWT Auth Failed: ${error.message}`);
+
+            if (error instanceof HttpException) {
+                throw error;
+            }
 
             if (error.name === 'TokenExpiredError') {
                 throw new UnauthorizedException('Срок действия токена истек');

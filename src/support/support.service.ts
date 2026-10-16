@@ -8,6 +8,7 @@ import { SupportAttachment } from './support-attachment.model';
 import { CreateSupportTicketDto } from './dto/support.dto';
 import { FilesService, UploadedFile } from '../files/files.service';
 import { User } from '../users/users.model';
+import { formatRetryAfter, RateLimiter } from '../utils/rate-limiter';
 
 export type SupportViewer = 'user' | 'admin';
 
@@ -48,7 +49,7 @@ const TICKET_USER_INCLUDE = { model: User, attributes: ['id', 'username', 'email
 
 @Injectable()
 export class SupportService {
-    private readonly guestTicketsByIp = new Map<string, number[]>();
+    private readonly guestTicketsLimiter = new RateLimiter(GUEST_TICKETS_LIMIT, GUEST_TICKETS_WINDOW_MS);
 
     constructor(
         @InjectModel(SupportTicket) private ticketModel: typeof SupportTicket,
@@ -362,27 +363,12 @@ export class SupportService {
     }
 
     private consumeGuestQuota(ip: string): void {
-        const now = Date.now();
-        const recent = (this.guestTicketsByIp.get(ip) ?? []).filter((at) => now - at < GUEST_TICKETS_WINDOW_MS);
-
-        if (recent.length >= GUEST_TICKETS_LIMIT) {
-            const waitMinutes = Math.ceil((GUEST_TICKETS_WINDOW_MS - (now - recent[0])) / 60000);
+        const result = this.guestTicketsLimiter.consume(ip);
+        if (!result.allowed) {
             throw new HttpException(
-                `Слишком много обращений. Попробуйте снова через ${waitMinutes} мин. или войдите в аккаунт`,
+                `Слишком много обращений. Попробуйте снова ${formatRetryAfter(result.retryAfterMs)} или войдите в аккаунт`,
                 HttpStatus.TOO_MANY_REQUESTS,
             );
-        }
-
-        recent.push(now);
-        this.guestTicketsByIp.set(ip, recent);
-
-        // чтобы карта не росла бесконечно от разовых посетителей
-        if (this.guestTicketsByIp.size > 1000) {
-            for (const [key, times] of this.guestTicketsByIp) {
-                if (times.every((at) => now - at >= GUEST_TICKETS_WINDOW_MS)) {
-                    this.guestTicketsByIp.delete(key);
-                }
-            }
         }
     }
 

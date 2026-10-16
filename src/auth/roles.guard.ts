@@ -6,10 +6,10 @@ import {
     Injectable,
     UnauthorizedException
 } from "@nestjs/common";
-import {Observable} from "rxjs";
 import {JwtService} from "@nestjs/jwt";
 import {Reflector} from "@nestjs/core";
 import {ROLES_KEY} from "./roles-auth.decorator";
+import {isJwtRevoked} from "./token-revocation";
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -17,7 +17,8 @@ export class RolesGuard implements CanActivate {
                 private reflector: Reflector) {
     }
 
-    canActivate(context: ExecutionContext): boolean | Promise<boolean> | Observable<boolean> {
+    async canActivate(context: ExecutionContext): Promise<boolean> {
+        let user;
         try {
             const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
                 context.getHandler(),
@@ -35,13 +36,21 @@ export class RolesGuard implements CanActivate {
                 throw new UnauthorizedException({message: 'Пользователь не авторизован'})
             }
 
-            const user = this.jwtService.verify(token);
+            user = this.jwtService.verify(token);
             req.user = user;
-            return user.roles.some(role => requiredRoles.includes(role.value));
+            if (!user.roles.some(role => requiredRoles.includes(role.value))) {
+                return false;
+            }
         } catch (e) {
             console.log(e)
             throw new HttpException( 'Нет доступа', HttpStatus.FORBIDDEN)
         }
+
+        // Токены, выданные до смены пароля, больше не действуют
+        if (await isJwtRevoked(user)) {
+            throw new UnauthorizedException('Сессия устарела, войдите снова');
+        }
+        return true;
     }
 
 }

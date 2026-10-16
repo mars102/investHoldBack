@@ -7,7 +7,6 @@ import {
     PayloadTooLargeException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { Request } from 'express';
 
 export const SUPPORT_ATTACHMENTS_FIELD = 'attachments';
 export const MAX_SUPPORT_ATTACHMENTS = 5;
@@ -51,17 +50,4 @@ export class SupportUploadExceptionFilter implements ExceptionFilter {
             : exception.getResponse();
         host.switchToHttp().getResponse().status(status).json(body);
     }
-}
-
-/**
- * IP клиента для антиспама. За nginx реальный адрес — последний элемент X-Forwarded-For
- * (его дописывает сам nginx через $proxy_add_x_forwarded_for, клиент может подделать только предыдущие).
- */
-export function getClientIp(req: Request): string {
-    const forwarded = req.headers['x-forwarded-for'];
-    const chain = (Array.isArray(forwarded) ? forwarded.join(',') : forwarded ?? '')
-        .split(',')
-        .map((part) => part.trim())
-        .filter(Boolean);
-    return chain[chain.length - 1] ?? req.socket.remoteAddress ?? 'unknown';
 }

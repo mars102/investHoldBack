@@ -23,9 +23,10 @@ import {
     CreateSupportMessageDto,
     CreateSupportTicketDto,
     UpdateSupportTicketDto,
-    validateSupportBody,
 } from './dto/support.dto';
-import { getClientIp, SupportUploadExceptionFilter, supportAttachmentsInterceptor } from './support-upload';
+import { SupportUploadExceptionFilter, supportAttachmentsInterceptor } from './support-upload';
+import { validateBody } from '../pipes/validate-body';
+import { getClientIp } from '../utils/client-ip';
 import { SUPPORT_STATUSES } from './support-ticket.model';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
@@ -65,7 +66,7 @@ export class SupportController {
         @Body() body: Record<string, unknown>,
         @UploadedFiles() files: UploadedFile[] = [],
     ) {
-        const dto = await validateSupportBody(CreateSupportTicketDto, body);
+        const dto = await validateBody(CreateSupportTicketDto, body, { trim: true });
         return this.supportService.createTicket(dto, files, user?.id ?? null, getClientIp(req), buildPublicBaseUrl(req));
     }
 
@@ -107,7 +108,7 @@ export class SupportController {
         @Body() body: Record<string, unknown>,
         @UploadedFiles() files: UploadedFile[] = [],
     ) {
-        const dto = await validateSupportBody(CreateSupportMessageDto, body);
+        const dto = await validateBody(CreateSupportMessageDto, body, { trim: true });
         return this.supportService.replyAsUser(user.id, id, dto.text, files, buildPublicBaseUrl(req));
     }
 }
@@ -177,7 +178,7 @@ export class SupportAdminController {
         @Body() body: Record<string, unknown>,
         @UploadedFiles() files: UploadedFile[] = [],
     ) {
-        const dto = await validateSupportBody(CreateAdminSupportMessageDto, body);
+        const dto = await validateBody(CreateAdminSupportMessageDto, body, { trim: true });
         return this.supportService.replyAsAdmin(admin.id, id, dto.text, dto.status, files, buildPublicBaseUrl(req));
     }
 
@@ -190,7 +191,7 @@ export class SupportAdminController {
     @ApiResponse({ status: 200, description: 'SupportTicket' })
     @ApiResponse({ status: 404, description: 'Обращение не найдено' })
     async updateStatus(@Req() req: Request, @Param('id', ParseIntPipe) id: number, @Body() body: Record<string, unknown>) {
-        const dto = await validateSupportBody(UpdateSupportTicketDto, body);
+        const dto = await validateBody(UpdateSupportTicketDto, body, { trim: true });
         return this.supportService.updateStatus(id, dto.status, buildPublicBaseUrl(req));
     }
 }

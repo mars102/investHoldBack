@@ -13,10 +13,21 @@ export class DatabaseInitService implements OnModuleInit {
 
     async onModuleInit() {
         console.log('🚀 Инициализация базы данных...');
+        await this.upgradeSchema();
         await this.initializeRoles();
         await this.initializeAdminUser();
         await this.initializeCoins();
         console.log('✅ Инициализация базы данных завершена');
+    }
+
+    /**
+     * synchronize: true создаёт только новые таблицы и не добавляет колонки в существующие —
+     * новые колонки уже существующих таблиц докатываем здесь идемпотентно.
+     */
+    private async upgradeSchema() {
+        await this.sequelize.query(
+            `ALTER TABLE users ADD COLUMN IF NOT EXISTS "passwordChangedAt" TIMESTAMP WITH TIME ZONE`,
+        );
     }
 
     private async initializeCoins() {

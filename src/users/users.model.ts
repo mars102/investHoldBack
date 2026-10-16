@@ -68,6 +68,10 @@ export class User extends Model<User, UserCreationAttrs> {
     @Column({type: DataType.DATE, allowNull: true})
     lastLoginAt: Date;
 
+    @ApiProperty({example: '2026-10-16T12:00:00Z', description: 'Когда пароль меняли в последний раз (JWT, выданные раньше, недействительны)', required: false})
+    @Column({type: DataType.DATE, allowNull: true})
+    passwordChangedAt: Date | null;
+
     @ApiProperty({example: 'true', description: 'Забанен или нет'})
     @Column({type: DataType.BOOLEAN, defaultValue: false})
     banned: boolean;

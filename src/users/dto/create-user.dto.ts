@@ -1,5 +1,6 @@
 import {ApiProperty} from "@nestjs/swagger";
 import {IsEmail, IsString, Length, IsOptional, IsBoolean, IsJSON, IsUrl, IsIn, IsISO8601} from "class-validator";
+import {PASSWORD_LENGTH_MESSAGE, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH} from "../../auth/dto/password.dto";
 
 export class CreateUserDto {
     @ApiProperty({example: 'crypto_trader', description: 'Уникальное имя пользователя'})
@@ -12,9 +13,9 @@ export class CreateUserDto {
     @IsEmail({}, {message: "Некорректный email"})
     readonly email: string;
 
-    @ApiProperty({example: '12345', description: 'Пароль'})
+    @ApiProperty({example: '123456', description: 'Пароль'})
     @IsString({message: 'Должно быть строкой'})
-    @Length(6, 32, {message: 'Пароль должен быть от 6 до 32 символов'})
+    @Length(PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, {message: PASSWORD_LENGTH_MESSAGE})
     readonly password: string;
 
     @ApiProperty({example: 'Иван', description: 'Имя пользователя', required: false})
